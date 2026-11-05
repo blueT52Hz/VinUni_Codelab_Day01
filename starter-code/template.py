@@ -10,8 +10,11 @@ Instructions:
 """
 
 import os
+from dotenv import load_dotenv
 import time
 from typing import Any, Callable
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Estimated costs per 1M INPUT & OUTPUT tokens (USD) as of March 2026
@@ -67,7 +70,28 @@ def call_openai(
     """
     # TODO: Import OpenAI, instantiate client, call chat.completions.create with parameters,
     #       measure execution start/end time, extract text and token usage, and return them.
-    raise NotImplementedError("Implement call_openai")
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        start = time.time()
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens
+        )
+        input_tokens = response.usage.prompt_tokens
+        output_tokens = response.usage.completion_tokens
+        latency = time.time() - start
+        return response.choices[0].message.content or "", latency, {"input_tokens": input_tokens, "output_tokens": output_tokens}
+    except:
+        raise NotImplementedError("Implement call_openai")
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +139,27 @@ def call_gemini(
     """
     # TODO: Initialize Gemini client, set config parameters, call generate_content,
     #       measure latency, extract response text and usage metadata, and return the tuple.
-    raise NotImplementedError("Implement call_gemini")
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            top_p=top_p,
+            max_output_tokens=max_tokens
+        )
+        start = time.time()
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=config
+        )
+        input_tokens = response.usage_metadata.prompt_token_count
+        output_tokens = response.usage_metadata.candidates_token_count
+        latency = time.time() - start
+        return response.contents or "", latency, {"input_tokens": input_tokens, "output_tokens": output_tokens}
+    except Exception as e:
+        raise NotImplementedError("Implement call_gemini")
 
 
 # ---------------------------------------------------------------------------
@@ -174,13 +218,28 @@ def compare_models(prompt: str) -> dict:
             - "gpt4o_mini": { "response": str, "latency": float, "cost": float, "input_tokens": int, "output_tokens": int }
             - "gemini_flash": { "response": str, "latency": float, "cost": float, "input_tokens": int, "output_tokens": int }
     """
-    # TODO: Call call_openai with default gpt-4o model
-    # TODO: Call call_openai with gpt-4o-mini model
-    # TODO: Call call_gemini with default gemini-2.5-flash model
-    # TODO: Calculate costs exactly based on input and output token counts using PRICING_1M_TOKENS
-    #       Formula: Cost = (input_tokens * input_rate_per_1M + output_tokens * output_rate_per_1M) / 1,000,000
-    # TODO: Assemble and return the comparison dictionary.
-    raise NotImplementedError("Implement compare_models")
+    try:
+        def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
+            pricing = PRICING_1M_TOKENS[model_name]
+            cost = (input_tokens / 1_000_000) * pricing["input"] + (output_tokens / 1_000_000) * pricing["output"]
+            return cost
+        def build_result(model_name: str, result: tuple[str, float, dict]) -> dict:
+            response_text, latency, usage = result
+            cost = calculate_cost(model_name, usage["input_tokens"], usage["output_tokens"])
+            return {
+                "response": response_text,
+                "latency": latency,
+                "cost": cost,
+                "input_tokens": usage["input_tokens"],
+                "output_tokens": usage["output_tokens"]
+            }
+        return {
+            "gpt4o": build_result("gpt-4o", call_openai(prompt, model=OPENAI_MODEL)),
+            "gpt4o_mini": build_result("gpt-4o-mini", call_openai(prompt, model=OPENAI_MINI_MODEL)),
+            "gemini_flash": build_result("gemini-2.5-flash", call_gemini(prompt, model=GEMINI_MODEL))
+        }
+    except:
+        raise NotImplementedError("Implement compare_models")
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +260,34 @@ def streaming_chatbot() -> None:
         - Keep history limited to the last 3 turns to optimize context window and costs.
     """
     # TODO: Setup interactive session, prompt user for input, stream response, and update history.
-    raise NotImplementedError("Implement streaming_chatbot")
+    try:
+        from google import genai
+        client = genai.Client(api_key=os.getenv(key="GEMINI_API_KEY"))
+        history = []
+        while True:
+            user_prompt = input("\nUser: ")
+            if user_prompt == "quit" or user_prompt == "exit": return
+            chat = client.chats.create(model=GEMINI_MODEL, history=history)
+            response_streaming = chat.send_message_stream(user_prompt)
+            response_text = ""
+            print("Chatbot: ")
+            for chunk in response_streaming:
+                if chunk.text:
+                    print(chunk.text, end="", flush=True)
+                    response_text += chunk
+            history.extend([
+                {
+                    "role": "user",
+                    "parts": [{"text": user_prompt}]
+                },
+                {
+                    "role": "model",
+                    "parts": [{"text": response_text}]
+                }
+            ])
+            history = history[-6:]
+    except:
+        raise NotImplementedError("Implement streaming_chatbot")
 
 
 # ---------------------------------------------------------------------------
