@@ -362,7 +362,24 @@ def format_comparison_table(results: list[dict]) -> str:
         | Prompt | Model | Response (truncated) | Latency | Tokens (In/Out) | Cost (USD) |
     """
     # TODO: Build and return the formatted table string. Truncate response to 50 chars for clean display.
-    raise NotImplementedError("Implement format_comparison_table")
+    model_names = {
+        "gpt4o": "GPT-4o",
+        "gpt4o_mini": "GPT-4o-Mini",
+        "gemini_flash": "Gemini-Flash",
+    }
+    lines = [
+        "| Prompt | Model | Response (truncated) | Latency | Tokens (In/Out) | Cost (USD) |",
+        "|---|---|---|---|---|---|",
+    ]
+    for result in results:
+        for key, name in model_names.items():
+            stats = result[key]
+            response = stats["response"].replace("\n", " ")[:50]
+            latency = f"{stats['latency']:.2f}s"
+            tokens = f"{stats['input_tokens']}/{stats['output_tokens']}"
+            cost = f"${stats['cost']:.6f}"
+            lines.append(f"| {result['prompt']} | {name} | {response} | {latency} | {tokens} | {cost} |")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
