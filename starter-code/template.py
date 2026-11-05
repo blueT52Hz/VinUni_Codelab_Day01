@@ -274,7 +274,7 @@ def streaming_chatbot() -> None:
             for chunk in response_streaming:
                 if chunk.text:
                     print(chunk.text, end="", flush=True)
-                    response_text += chunk
+                    response_text += chunk.text
             history.extend([
                 {
                     "role": "user",
@@ -339,7 +339,12 @@ def batch_compare(prompts: list[str]) -> list[dict]:
         key "prompt" containing the original prompt string.
     """
     # TODO: iterate over prompts, call compare_models, and inject the original "prompt".
-    raise NotImplementedError("Implement batch_compare")
+    results = []
+    for prompt in prompts:
+        result = compare_models(prompt)
+        result["prompt"] = prompt
+        results.append(result)
+    return results
 
 
 # ---------------------------------------------------------------------------
