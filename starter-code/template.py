@@ -74,7 +74,7 @@ def call_openai(
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         start = time.time()
-        response = client.chat.completions.create(
+        response = retry_with_backoff(lambda: client.chat.completions.create(
             model=model,
             messages=[
                 {
@@ -85,7 +85,7 @@ def call_openai(
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens
-        )
+        ))
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
         latency = time.time() - start
@@ -149,15 +149,15 @@ def call_gemini(
             max_output_tokens=max_tokens
         )
         start = time.time()
-        response = client.models.generate_content(
+        response = retry_with_backoff(lambda: client.models.generate_content(
             model=model,
             contents=prompt,
             config=config
-        )
+        ))
         input_tokens = response.usage_metadata.prompt_token_count
         output_tokens = response.usage_metadata.candidates_token_count
         latency = time.time() - start
-        return response.contents or "", latency, {"input_tokens": input_tokens, "output_tokens": output_tokens}
+        return response.text or "", latency, {"input_tokens": input_tokens, "output_tokens": output_tokens}
     except Exception as e:
         raise NotImplementedError("Implement call_gemini")
 
@@ -314,7 +314,14 @@ def retry_with_backoff(
         The last exception raised by fn() after all retries are exhausted.
     """
     # TODO: implement retry loop with exponential backoff
-    raise NotImplementedError("Implement retry_with_backoff")
+    for attempt in range(max_retries + 1):
+        try:
+            return fn()
+        except Exception:
+            if attempt == max_retries:
+                raise
+            delay = base_delay * (2 ** attempt)
+            time.sleep(delay)
 
 
 # ---------------------------------------------------------------------------
